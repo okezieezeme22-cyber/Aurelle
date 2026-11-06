@@ -24,6 +24,7 @@
   const nav = $('mainNav'), scrim = $('scrim'), toggle = $('menuToggle');
   function setMenu(open) {
     nav.classList.toggle('is-open', open);
+    header.classList.toggle('is-menu-open', open);
     scrim.hidden = !open;
     toggle.setAttribute('aria-expanded', String(open));
     document.body.style.overflow = open ? 'hidden' : '';
