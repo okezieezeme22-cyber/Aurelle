@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Admin sign in | AURÉLLE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/admin.css">
+</head>
+<body data-page="admin-login" class="admin-login">
+  <main class="auth auth--admin">
+    <div class="auth__card">
+      <span class="logo">AURÉLLE</span>
+      <h1 class="page-title page-title--sm">Admin sign in</h1>
+      <form id="adminForm" novalidate>
+        <div class="fgroup"><label for="aemail">Email address</label><input class="field" id="aemail" type="email" autocomplete="username" aria-describedby="aemailErr"><p class="ferr" id="aemailErr"></p></div>
+        <div class="fgroup"><label for="apass">Password</label><input class="field" id="apass" type="password" autocomplete="current-password" aria-describedby="apassErr"><p class="ferr" id="apassErr"></p></div>
+        <button class="btn btn--dark btn--full" type="submit">Sign in</button>
+        <p class="form-msg" id="formMsg" role="alert"></p>
+      </form>
+      <div class="demo-note">
+        <strong>Portfolio demo credentials</strong>
+        <p>Email: <code>admin@aurelle.example</code><br>Password: <code>AurelleAdmin#2026</code></p>
+        <p>This sign-in only runs in your browser, so it is a demonstration and not real security. A live store needs server-side roles (Supabase) so customers can never reach admin features.</p>
+      </div>
+      <p class="auth__alt"><a class="text-link" href="../index.html">Back to the store</a></p>
+    </div>
+  </main>
+  <script src="../js/admin.js"></script>
+</body>
+</html>
