@@ -2,7 +2,11 @@
   const A = window.AURELLE, U = window.AUTH, S = window.AURELLE_SHOP, $ = (id) => document.getElementById(id);
   const year = $('year'); if (year) year.textContent = new Date().getFullYear();
   const me0 = U.current();
-  if (!me0) { location.replace('login.html?next=account.html'); return; }
+  if (!me0) {
+    const next = `account.html${location.hash}`;
+    location.replace(`login.html?next=${encodeURIComponent(next)}`);
+    return;
+  }
   const root = $('accRoot');
   const date = (iso) => new Date(iso).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
   const say = (id, m, kind) => { const el = $(id); el.textContent = m; el.className = 'form-msg' + (kind ? ' is-' + kind : ''); };
