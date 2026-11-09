@@ -31,7 +31,7 @@
   const form = $('newsletterForm');
   if (form) {
     const input = $('nlEmail'), msg = $('nlMsg');
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = input.value.trim();
       msg.className = 'newsletter__msg';
@@ -41,10 +41,8 @@
         msg.classList.add('is-error'); input.focus(); return;
       }
       input.removeAttribute('aria-invalid');
-      try {
-        const list = JSON.parse(localStorage.getItem('aurelle_newsletter') || '[]');
-        if (!list.includes(email)) localStorage.setItem('aurelle_newsletter', JSON.stringify([...list, email]));
-      } catch (err) {}
+      const r = await window.DB.subscribe(email);
+      if (!r.ok) { msg.textContent = 'Sign-up is not available right now. Please try again later.'; msg.classList.add('is-error'); return; }
       form.reset();
       msg.textContent = 'You are subscribed. Check your inbox for your 10% code.';
       msg.classList.add('is-ok');

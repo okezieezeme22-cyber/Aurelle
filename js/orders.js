@@ -1,8 +1,7 @@
-/* Order storage and display helpers shared by the account page and the admin */
+/* Order display helpers shared by the account page and the admin. Orders come from the database (see db.js). */
 window.ORDERS = (() => {
   const STEPS = ['Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered'];
-  const read = () => { try { return JSON.parse(localStorage.getItem('aurelle_orders') || '[]'); } catch (e) { return []; } };
-  const write = (l) => { try { localStorage.setItem('aurelle_orders', JSON.stringify(l)); return true; } catch (e) { return false; } };
+  const read = () => window.AURELLE_ORDERS || [];
   const fmt = (iso) => new Date(iso).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
   const fmtTime = (iso) => new Date(iso).toLocaleString('en-NG', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   const payLabel = (o) => (o.paymentStatus === 'Unpaid' ? 'Pending payment' : o.paymentStatus);
@@ -22,5 +21,5 @@ window.ORDERS = (() => {
       return `<li class="${cls}"><span class="tl__dot" aria-hidden="true"></span><span class="tl__label">${s}${cls ? '<span class="sr-only"> (reached)</span>' : ''}</span><span class="tl__time">${e ? fmtTime(e.at) : ''}</span></li>`;
     }).join('')}</ol>`;
   }
-  return { STEPS, read, write, fmt, fmtTime, payLabel, esc, hist, timeline };
+  return { STEPS, read, fmt, fmtTime, payLabel, esc, hist, timeline };
 })();

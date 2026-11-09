@@ -11,7 +11,7 @@
   const date = (iso) => new Date(iso).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
   const say = (id, m, kind) => { const el = $(id); el.textContent = m; el.className = 'form-msg' + (kind ? ' is-' + kind : ''); };
   const STEPS = ['Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered'];
-  const myOrders = () => A.rd('aurelle_orders', []).filter((o) => (o.userEmail || o.customer.email).toLowerCase() === me0.email);
+  const myOrders = () => (window.AURELLE_ORDERS || []).filter((o) => (o.userEmail || o.customer.email).toLowerCase() === me0.email);
   const payLabel = (s) => (s === 'Unpaid' ? 'Pending payment' : s);
 
   const NAV = [['profile', 'Profile'], ['addresses', 'Addresses'], ['orders', 'Orders']];
@@ -25,7 +25,7 @@
         </nav>
         <div class="acc__body">${inner}</div>
       </div>`;
-    $('logoutBtn').addEventListener('click', () => { U.logout(); location.href = 'index.html'; });
+    $('logoutBtn').addEventListener('click', async () => { await U.logout(); location.href = 'index.html'; });
   }
 
   /* ----- Profile ----- */
@@ -47,12 +47,13 @@
         <button class="btn btn--ghost" type="submit">Update password</button>
         <p class="form-msg" id="pwMsg" role="status"></p>
       </form>`);
-    $('profForm').addEventListener('submit', (e) => {
+    $('profForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = $('pName').value.trim(), phone = $('pPhone').value.trim();
       if (name.split(/\s+/).length < 2) return say('profMsg', 'Enter your first and last name.', 'error');
       if (!/^(\+234|234|0)[789][01]\d{8}$/.test(phone.replace(/[\s-]/g, ''))) return say('profMsg', 'Enter a valid Nigerian phone number.', 'error');
-      U.update({ name, phone }); say('profMsg', 'Profile saved.', 'ok');
+      const r = await U.update({ name, phone });
+      say('profMsg', r.ok ? 'Profile saved.' : r.error, r.ok ? 'ok' : 'error');
     });
     $('pwForm').addEventListener('submit', async (e) => {
       e.preventDefault(); const r = await U.changePassword($('pwOld').value, $('pwNew').value);
@@ -78,18 +79,19 @@
         <div class="fgroup"><label for="aCity">City or town</label><input class="field" id="aCity"></div>
         <div class="fgroup fgroup--wide"><button class="btn btn--dark" type="submit">Save address</button><p class="form-msg" id="addrMsg" role="alert"></p></div>
       </form>`);
-    $('addrForm').addEventListener('submit', (e) => {
+    $('addrForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const a = { label: $('aLabel').value.trim(), address: $('aAddr').value.trim(), city: $('aCity').value.trim(), state: $('aState').value };
       if (!a.label || a.address.length < 8 || a.city.length < 2 || !a.state) return say('addrMsg', 'Fill in every field with a full address.', 'error');
-      const l = [...list, { ...a, isDefault: !list.length }]; U.update({ addresses: l }); addresses();
+      const l = [...list, { ...a, isDefault: !list.length }];
+      const r = await U.update({ addresses: l }); if (!r.ok) return say('addrMsg', r.error, 'error'); addresses();
     });
-    root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
+    root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
       const l = list.filter((_, i) => i !== +b.dataset.del); if (l.length && !l.some((a) => a.isDefault)) l[0].isDefault = true;
-      U.update({ addresses: l }); addresses();
+      await U.update({ addresses: l }); addresses();
     }));
-    root.querySelectorAll('[data-def]').forEach((b) => b.addEventListener('click', () => {
-      U.update({ addresses: list.map((a, i) => ({ ...a, isDefault: i === +b.dataset.def })) }); addresses();
+    root.querySelectorAll('[data-def]').forEach((b) => b.addEventListener('click', async () => {
+      await U.update({ addresses: list.map((a, i) => ({ ...a, isDefault: i === +b.dataset.def })) }); addresses();
     }));
   }
 
@@ -112,7 +114,7 @@
     const at = (s) => { const h = (o.history || []).find((x) => x.status === s); return h ? date(h.at) : ''; };
     const idx = STEPS.indexOf(o.orderStatus);
     const delivered = o.orderStatus === 'Delivered';
-    const reviewed = new Set(A.rd('aurelle_reviews', []).filter((r) => r.email === me0.email).map((r) => r.slug));
+    const reviewed = new Set(window.DB.myReviews || []);
     shell('order/' + ref, `
       <a class="text-link" href="#orders">All orders</a>
       <h2 class="block-title">${A.esc(o.ref)}</h2>
@@ -127,10 +129,11 @@
           <input class="field" placeholder="Write a short review" maxlength="200" aria-label="Review text"><button class="btn btn--ghost" type="submit">Post review</button></form>`) : ''}</li>`).join('')}</ul>
       <dl class="totals"><div><dt>Subtotal</dt><dd>${A.naira(o.subtotal)}</dd></div><div><dt>Delivery</dt><dd>${o.deliveryFee === 0 ? 'Free' : A.naira(o.deliveryFee)}</dd></div><div class="totals__sum"><dt>Total</dt><dd>${A.naira(o.total)}</dd></div></dl>
       <div class="deliver"><strong>Delivering to</strong><p>${A.esc(o.customer.fullName)}<br>${A.esc(o.customer.address)}, ${A.esc(o.customer.city)}, ${A.esc(o.customer.state)}<br>${A.esc(o.customer.phone)}</p></div>`);
-    root.querySelectorAll('.rv').forEach((f) => f.addEventListener('submit', (e) => {
+    root.querySelectorAll('.rv').forEach((f) => f.addEventListener('submit', async (e) => {
       e.preventDefault(); const text = f.querySelector('input').value.trim(); if (text.length < 5) return;
-      const all = A.rd('aurelle_reviews', []); all.unshift({ slug: f.dataset.slug, email: me0.email, name: me0.name.split(' ')[0] + ' ' + (me0.name.split(' ')[1] || '')[0] + '.', rating: +f.querySelector('select').value, text, at: new Date().toISOString() });
-      A.wr('aurelle_reviews', all); orderDetail(ref);
+      const r = await window.DB.addReview({ slug: f.dataset.slug, reviewer: me0.name.split(' ')[0] + ' ' + (me0.name.split(' ')[1] || '')[0] + '.', rating: +f.querySelector('select').value, text });
+      if (!r.ok) { f.insertAdjacentHTML('beforeend', `<small class="form-msg is-error">${A.esc(r.error)}</small>`); return; }
+      orderDetail(ref);
     }));
   }
 

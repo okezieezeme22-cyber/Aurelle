@@ -100,14 +100,13 @@
   }
   Object.keys(rules).forEach((id) => $(id).addEventListener('blur', () => check(id)));
 
-  /* ----- Place demo order ----- */
-  f.addEventListener('submit', (e) => {
+  /* ----- Place order (the database checks prices, stock and totals) ----- */
+  f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const msg = $('formMsg'); msg.textContent = ''; msg.className = 'form-msg';
     const bad = Object.keys(rules).filter((id) => !check(id));
     if (bad.length) { $(bad[0]).focus(); msg.textContent = 'Please fix the highlighted fields.'; msg.classList.add('is-error'); return; }
 
-    // Re-check prices and stock from the catalogue, never from what the cart stored
     const items = [];
     for (const i of cart) {
       const p = bySlug[i.slug], v = A.variants(p).find((x) => x.size === i.size && x.colour === i.colour);
@@ -115,21 +114,19 @@
         msg.textContent = `${p.name} (${i.colour}, ${i.size}) is no longer available in that quantity. Please update your cart.`;
         msg.classList.add('is-error'); return;
       }
-      items.push({ slug: p.slug, name: p.name, image: p.image, sku: v.sku, size: i.size, colour: i.colour, unitPrice: p.price, quantity: i.quantity, lineTotal: p.price * i.quantity });
+      items.push({ sku: v.sku, quantity: i.quantity });
     }
-    const sub = items.reduce((n, i) => n + i.lineTotal, 0), fee = S.deliveryFee($('state').value, sub);
-    const d = new Date(), pad = (n) => String(n).padStart(2, '0');
-    const ref = `AUR-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     const customer = { fullName: $('fullName').value.trim(), email: $('email').value.trim(), phone: $('phone').value.trim(), address: $('address').value.trim(), state: $('state').value, city: $('city').value.trim(), notes: $('notes').value.trim() };
-    const order = { ref, items, subtotal: sub, deliveryFee: fee, total: sub + fee, customer, orderStatus: 'Pending', paymentStatus: 'Unpaid', createdAt: d.toISOString(), userEmail: me ? me.email : null, stockDeducted: true, history: [{ status: 'Pending', at: d.toISOString(), note: 'Order placed' }] };
 
-    try {
-      const orders = JSON.parse(load('aurelle_orders') || '[]');
-      store('aurelle_orders', JSON.stringify([order, ...orders]));
-      store('aurelle_checkout', JSON.stringify(customer));
-    } catch (err) { msg.textContent = 'Could not save your order. Check that your browser allows site storage.'; msg.classList.add('is-error'); return; }
-    items.forEach((i) => A.adjustStock(i.slug, i.sku, -i.quantity));
+    const btn = $('placeBtn'); btn.disabled = true; btn.textContent = 'Placing your order…';
+    const r = await window.DB.placeOrder(items, customer);
+    if (!r.ok) {
+      btn.disabled = false; btn.textContent = 'Place order';
+      msg.textContent = r.error; msg.classList.add('is-error'); return;
+    }
+    store('aurelle_checkout', JSON.stringify(customer));
+    store('aurelle_last_order', JSON.stringify(r.order));
     A.writeCart([]);
-    location.href = `order-success.html?ref=${encodeURIComponent(ref)}`;
+    location.href = `order-success.html?ref=${encodeURIComponent(r.order.ref)}`;
   });
 })();

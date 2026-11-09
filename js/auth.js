@@ -1,74 +1,91 @@
-/* DEMO authentication, stored in this browser only.
-   Passwords are salted and hashed, but anyone with access to the browser can still edit storage,
-   so this is NOT real security. Real login and roles need a backend (for example Supabase). */
+/* Sign-in for customers and admins, using Supabase Auth.
+   Passwords are handled by Supabase (never stored here). Roles live in the database (public.profiles),
+   so a visitor cannot make themselves an admin by editing the page or their browser storage. */
 (() => {
-  const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
-  const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
-  const salt = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const DB = window.DB;
   const norm = (e) => String(e || '').trim().toLowerCase();
-  async function hash(pw, s) {
-    const data = s + ':' + pw;
-    if (window.crypto && crypto.subtle) {
-      const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data));
-      return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
-    }
-    let h = 5381; for (const c of data) h = ((h << 5) + h + c.charCodeAt(0)) >>> 0; return 'x' + h.toString(16);
-  }
-  const users = () => read('aurelle_users', []);
-  const save = (l) => write('aurelle_users', l);
-  const pub = (u) => u && { id: u.id, role: u.role, name: u.name, email: u.email, phone: u.phone, addresses: u.addresses || [], created: u.created, status: u.status };
-  async function seed() {}
-  const current = () => {
-    const s = read('aurelle_session', null); if (!s) return null;
-    const u = users().find((x) => x.id === s.id);
-    return u && u.status !== 'suspended' ? pub(u) : null;
-  };
   const pwError = (p) => (p.length < 8 ? 'Use at least 8 characters.' : !/[A-Za-z]/.test(p) || !/\d/.test(p) ? 'Include at least one letter and one number.' : '');
+  const NOT_READY = { ok: false, error: 'The store database is not connected yet.' };
+  const friendly = (e) => {
+    const m = (e && e.message) || '';
+    if (/rate limit|too many/i.test(m)) return 'Too many attempts. Please wait a few minutes and try again.';
+    if (/invalid login/i.test(m)) return 'Email or password is incorrect.';
+    if (/not confirmed/i.test(m)) return 'Please confirm your email first. Check your inbox for the link.';
+    return m || 'Something went wrong. Please try again.';
+  };
+
+  const current = () => (DB.profile && DB.profile.status !== 'suspended' ? DB.profile : null);
 
   async function register({ name, email, phone, password }) {
-    await seed(); email = norm(email);
-    if (users().some((u) => u.email === email)) return { ok: false, error: 'An account with this email already exists. Try logging in.' };
-    const s = salt();
-    const u = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), role: 'customer', name: name.trim(), email, phone: phone.trim(), salt: s, hash: await hash(password, s), created: new Date().toISOString(), createdAt: new Date().toISOString(), status: 'active', addresses: [] };
-    const l = users(); l.push(u); save(l); write('aurelle_session', { id: u.id });
-    return { ok: true, user: pub(u) };
+    if (DB.offline) return NOT_READY;
+    const { data, error } = await DB.sb.auth.signUp({ email: norm(email), password, options: { data: { name: name.trim(), phone: phone.trim() } } });
+    if (error) return /already registered/i.test(error.message)
+      ? { ok: false, error: 'An account with this email already exists. Try logging in.' } : { ok: false, error: friendly(error) };
+    if (data.user && data.user.identities && data.user.identities.length === 0)
+      return { ok: false, error: 'An account with this email already exists. Try logging in.' };
+    if (!data.session) return { ok: true, needsConfirm: true };           // email confirmation is switched on in Supabase
+    DB.setProfile(await DB.loadProfile(data.user.id));
+    return { ok: true, user: current() };
   }
+
   const fails = {};
-  async function login(email, password, needRole) {
-    await seed(); email = norm(email);
+  async function login(email, password) {
+    if (DB.offline) return NOT_READY;
+    email = norm(email);
     const f = fails[email] || { n: 0, until: 0 };
     if (Date.now() < f.until) return { ok: false, error: 'Too many attempts. Wait 30 seconds and try again.' };
-    const u = users().find((x) => x.email === email);
-    if (!u || u.hash !== await hash(password, u.salt)) {
+    const { data, error } = await DB.sb.auth.signInWithPassword({ email, password });
+    if (error) {
       f.n++; if (f.n >= 5) { f.n = 0; f.until = Date.now() + 30000; } fails[email] = f;
-      return { ok: false, error: 'Email or password is incorrect.' };
+      return { ok: false, error: friendly(error) };
     }
-    if (u.status === 'suspended') return { ok: false, error: 'This account is suspended.' };
-    if (needRole && u.role !== needRole) return { ok: false, error: 'This account does not have administrator access.' };
-    fails[email] = { n: 0, until: 0 }; write('aurelle_session', { id: u.id });
-    return { ok: true, user: pub(u) };
+    fails[email] = { n: 0, until: 0 };
+    const p = await DB.loadProfile(data.user.id);
+    if (!p || p.status === 'suspended') { await DB.sb.auth.signOut(); DB.setProfile(null); return { ok: false, error: 'This account is suspended.' }; }
+    DB.setProfile(p);
+    return { ok: true, user: p };
   }
-  const logout = () => { try { localStorage.removeItem('aurelle_session'); } catch (e) {} };
-  function update(patch) {
-    const me = current(); if (!me) return false;
-    const l = users(), u = l.find((x) => x.id === me.id);
-    ['name', 'phone', 'addresses'].forEach((k) => { if (patch[k] !== undefined) u[k] = patch[k]; });
-    return save(l);
+
+  async function logout() {
+    DB.setProfile(null);
+    try { sessionStorage.removeItem('aurelle_cat:anon'); } catch (e) {}
+    if (DB.sb) await DB.sb.auth.signOut();
   }
+
+  async function update(patch) {
+    const me = current(); if (!me || DB.offline) return NOT_READY;
+    const row = {};
+    ['name', 'phone', 'addresses'].forEach((k) => { if (patch[k] !== undefined) row[k] = patch[k]; });
+    const { error } = await DB.sb.from('profiles').update(row).eq('id', me.id);
+    if (error) return { ok: false, error: friendly(error) };
+    DB.setProfile({ ...me, ...row });
+    return { ok: true };
+  }
+
   async function changePassword(oldPw, newPw) {
-    const me = current(); if (!me) return { ok: false, error: 'Please log in again.' };
-    const l = users(), u = l.find((x) => x.id === me.id);
-    if (u.hash !== await hash(oldPw, u.salt)) return { ok: false, error: 'Your current password is incorrect.' };
+    const me = current(); if (!me || DB.offline) return { ok: false, error: 'Please log in again.' };
     const e = pwError(newPw); if (e) return { ok: false, error: e };
-    u.salt = salt(); u.hash = await hash(newPw, u.salt); save(l); return { ok: true };
+    const check = await DB.sb.auth.signInWithPassword({ email: me.email, password: oldPw });
+    if (check.error) return { ok: false, error: 'Your current password is incorrect.' };
+    const { error } = await DB.sb.auth.updateUser({ password: newPw });
+    return error ? { ok: false, error: friendly(error) } : { ok: true };
   }
-  /* Demo only: a real store would email a reset link instead of letting the visitor set a password directly */
-  async function resetPassword(email, newPw) {
-    await seed(); const l = users(), u = l.find((x) => x.email === norm(email));
-    const e = pwError(newPw); if (e) return { ok: false, error: e };
-    if (u && u.role === 'customer') { u.salt = salt(); u.hash = await hash(newPw, u.salt); save(l); }
-    return { ok: true }; // same reply whether or not the email exists
+
+  /* Password reset: Supabase emails a link that brings the person back to forgot.html */
+  async function sendReset(email) {
+    if (DB.offline) return NOT_READY;
+    const redirectTo = location.origin + location.pathname.replace(/[^/]*$/, '') + 'forgot.html';
+    const { error } = await DB.sb.auth.resetPasswordForEmail(norm(email), { redirectTo });
+    return error && /rate limit/i.test(error.message) ? { ok: false, error: friendly(error) } : { ok: true };   // same reply whether or not the email exists
   }
-  window.AUTH = { current, register, login, logout, update, changePassword, resetPassword, pwError, users, save, seed };
-  seed();
+  const isRecovery = () => DB.recovery || /type=recovery/.test(location.hash);
+  async function setNewPassword(pw) {
+    const e = pwError(pw); if (e) return { ok: false, error: e };
+    const { error } = await DB.sb.auth.updateUser({ password: pw });
+    if (error) return { ok: false, error: friendly(error) };
+    await DB.sb.auth.signOut(); DB.setProfile(null);
+    return { ok: true };
+  }
+
+  window.AUTH = { current, register, login, logout, update, changePassword, sendReset, setNewPassword, isRecovery, pwError };
 })();

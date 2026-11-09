@@ -25,20 +25,22 @@
 
   const find = $('findForm');
   if (find) {
-    const reset = $('resetForm'), msg = $('formMsg'); let who = '';
-    find.addEventListener('submit', (e) => {
+    const reset = $('resetForm'), msg = $('formMsg');
+    if (A.isRecovery() && A.current()) { find.hidden = true; reset.hidden = false; }     // arrived from the emailed reset link
+    find.addEventListener('submit', async (e) => {
       e.preventDefault(); say(msg, ''); const email = $('email').value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { $('emailErr').textContent = 'Enter a valid email.'; return; }
       $('emailErr').textContent = '';
-      if (!A.users().some((u) => u.email === email && u.role === 'customer')) return say(msg, 'No account with that email was made in this browser.', 'error');
-      who = email; find.hidden = true; reset.hidden = false; $('newPassword').focus();
+      const r = await A.sendReset(email);
+      if (!r.ok) return say(msg, r.error, 'error');
+      say(msg, 'If that email has an account, we have sent a link to reset the password. Check your inbox.', 'ok');
     });
     reset.addEventListener('submit', async (e) => {
       e.preventDefault(); say(msg, '');
       const pw = $('newPassword').value, bad = A.pwError(pw);
       $('newPasswordErr').textContent = bad; $('confirmErr').textContent = pw === $('confirm').value ? '' : 'Passwords do not match.';
       if (bad || pw !== $('confirm').value) return;
-      const r = await A.resetPassword(who, pw);
+      const r = await A.setNewPassword(pw);
       if (!r.ok) return say(msg, r.error, 'error');
       reset.hidden = true; say(msg, 'Your password has been changed.', 'ok'); $('doneLink').hidden = false;
     });
@@ -57,6 +59,7 @@
       if (['rName', 'rEmail', 'rPhone', 'rPass', 'rPass2'].some((i) => $(i + 'Err').textContent)) return;
       const r = await A.register(v);
       if (!r.ok) return say(m, r.error, 'error');
+      if (r.needsConfirm) { reg.reset(); return say(m, 'Almost done. We sent a confirmation link to your email. Open it, then log in.', 'ok'); }
       location.href = dest;
     });
   }

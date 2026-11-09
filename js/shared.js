@@ -14,31 +14,25 @@
 
   /* Variants with a SKU and a stock count each. The product's total stock is
      split across variants. Real stock tracking arrives with a backend. */
-  const readStock = () => { try { return JSON.parse(localStorage.getItem('aurelle_stock') || '{}'); } catch (e) { return {}; } };
   function variants(p) {
+    if (p.dbVariants) return p.dbVariants.map((v) => ({ ...v }));          // real variants and stock from the database
+    // Fallback used only when the database is not connected
     const sizes = SIZES[p.category], colours = COLOUR_OVERRIDE[p.slug] || COLOURS[p.category];
     const code = p.slug.split('-').map((w) => w[0]).join('').toUpperCase();
-    const over = readStock();
     const list = [];
     let i = 0;
     colours.forEach((colour) => sizes.forEach((size) => {
       const sku = `AUR-${p.category.slice(0, 3).toUpperCase()}-${code}-${colour.slice(0, 3).toUpperCase()}-${size.replace(' ', '')}`;
-      const base = p.stock === 0 ? 0 : Math.max(1, p.stock + ((i * 7) % 5) - 2);
-      list.push({ size, colour, sku, stock: sku in over ? Math.max(0, +over[sku] || 0) : base });
+      list.push({ size, colour, sku, stock: p.stock === 0 ? 0 : Math.max(1, p.stock + ((i * 7) % 5) - 2) });
       i++;
     }));
     return list;
   }
   const totalStock = (p) => variants(p).reduce((n, v) => n + v.stock, 0);
-  /* Change one variant's stock by delta (never below zero). Returns { from, to } or null. */
-  function adjustStock(slug, sku, delta) {
-    const p = (window.AURELLE_ALL || []).find((x) => x.slug === slug); if (!p) return null;
-    const v = variants(p).find((x) => x.sku === sku); if (!v) return null;
-    const to = Math.max(0, v.stock + delta), o = readStock(); o[sku] = to;
-    try { localStorage.setItem('aurelle_stock', JSON.stringify(o)); } catch (e) { return null; }
-    return { from: v.stock, to };
-  }
-  const optionsOf = (p) => ({ sizes: SIZES[p.category], colours: COLOUR_OVERRIDE[p.slug] || COLOURS[p.category] });
+  const optionsOf = (p) => {
+    if (p.dbVariants) return { sizes: [...new Set(p.dbVariants.map((v) => v.size))], colours: [...new Set(p.dbVariants.map((v) => v.colour))] };
+    return { sizes: SIZES[p.category], colours: COLOUR_OVERRIDE[p.slug] || COLOURS[p.category] };
+  };
 
   /* ----- Wishlist ----- */
   const readWish = () => { try { return JSON.parse(localStorage.getItem('aurelle_wishlist') || '[]'); } catch (e) { return []; } };
@@ -109,7 +103,6 @@
 
   const rd = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
   const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
-  const readReviews = (slug) => rd('aurelle_reviews', []).filter((r) => r.slug === slug);
 
-  window.AURELLE = { rd, wr, readReviews, catLabel, naira, esc, variants, totalStock, adjustStock, optionsOf, HEX, readWish, readCart, writeCart, inCart, addToCart, card, products: window.AURELLE_PRODUCTS || [] };
+  window.AURELLE = { rd, wr, catLabel, naira, esc, variants, totalStock, optionsOf, HEX, readWish, readCart, writeCart, inCart, addToCart, card, products: window.AURELLE_PRODUCTS || [] };
 })();

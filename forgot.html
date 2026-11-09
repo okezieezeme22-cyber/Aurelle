@@ -78,7 +78,7 @@
     <div class="container auth">
       <div class="auth__card">
         <h1 class="page-title page-title--sm">Reset your password</h1>
-        <p class="page-sub">Demo version: no email is sent. Enter the email of an account made in this browser to set a new password.</p>
+        <p class="page-sub">Enter your email and we will send you a link to set a new password.</p>
         <form id="findForm" novalidate>
           <div class="fgroup"><label for="email">Email address</label><input class="field" id="email" name="email" type="email" autocomplete="email" aria-describedby="emailErr"><p class="ferr" id="emailErr"></p></div>
           <button class="btn btn--dark btn--full" type="submit">Continue</button>
@@ -145,13 +145,6 @@
     </div>
   </footer>
 
-    <script src="js/products.js"></script>
-  <script src="js/overrides.js"></script>
-  <script src="js/shared.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/checkout-config.js"></script>
-  <script src="js/orders.js"></script>
-  <script src="js/main.js"></script>
-  <script src="js/auth-pages.js"></script>
+  <script src="js/boot.js" data-early="main" data-scripts="overrides,shared,auth,checkout-config,orders,auth-pages"></script>
 </body>
 </html>

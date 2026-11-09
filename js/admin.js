@@ -1,28 +1,30 @@
-/* AURÉLLE admin (demo). Everything runs in this browser; real roles and data need a backend. */
+/* AURÉLLE admin. Data lives in Supabase; the database re-checks the admin role on every read and write. */
 (() => {
-  const ADMIN = { email: 'admin@aurelle.example', password: 'AurelleAdmin#2026' };
-  const SESSION = 'aurelle_admin';
   const $ = (id) => document.getElementById(id);
   const page = document.body.dataset.page;
 
   /* ===== Sign-in page ===== */
   if (page === 'admin-login') {
-    if (sessionStorage.getItem(SESSION)) { location.replace('index.html'); return; }
-    $('adminForm').addEventListener('submit', (e) => {
+    const U = window.AUTH, cur = U.current();
+    if (cur && cur.role === 'admin') { location.replace('index.html'); return; }
+    $('adminForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = $('aemail').value.trim().toLowerCase(), pw = $('apass').value, msg = $('formMsg');
       $('aemailErr').textContent = email ? '' : 'Enter your email.';
       $('apassErr').textContent = pw ? '' : 'Enter your password.';
-      if (!email || !pw) return;
-      if (email === ADMIN.email && pw === ADMIN.password) { sessionStorage.setItem(SESSION, email); location.href = 'index.html'; }
-      else { msg.textContent = 'Email or password is incorrect.'; msg.className = 'form-msg is-error'; }
+      msg.textContent = ''; if (!email || !pw) return;
+      const r = await U.login(email, pw);
+      if (!r.ok) { msg.textContent = r.error; msg.className = 'form-msg is-error'; return; }
+      if (r.user.role !== 'admin') { await U.logout(); msg.textContent = 'This account does not have administrator access.'; msg.className = 'form-msg is-error'; return; }
+      location.href = 'index.html';
     });
     return;
   }
 
   /* ===== Gate ===== */
-  if (!sessionStorage.getItem(SESSION)) { location.replace('login.html'); return; }
-  const adminEmail = sessionStorage.getItem(SESSION);
+  const me = window.AUTH.current();
+  if (!me || me.role !== 'admin') { location.replace('login.html'); return; }
+  const adminEmail = me.email;
   $('adminUser').textContent = adminEmail;
 
   const A = window.AURELLE, O = window.ORDERS, S = window.AURELLE_SHOP, esc = O.esc;
@@ -32,8 +34,8 @@
   const jget = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
   const jset = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
   const orders = () => O.read();
-  const users = () => jget('aurelle_users', []);
-  const invLog = () => jget('aurelle_inventory_log', []);
+  const users = () => window.AURELLE_USERS || [];
+  const invLog = () => window.AURELLE_INVLOG || [];
   const ALL = () => window.AURELLE_ALL;
   const revenueOf = (o) => (o.paymentStatus === 'Paid' || o.paymentStatus === 'Partially refunded' ? o.total - (o.refunded || 0) : 0);
   const pill = (t, cls = '') => `<span class="pill ${cls}">${esc(t)}</span>`;
@@ -101,7 +103,7 @@
 
     view.innerHTML = `
       <div class="view__head">
-        <div><h1 class="view__title">Dashboard</h1><p class="view__sub">${hasDemo ? 'Includes sample data.' : 'Live from this browser.'} Revenue counts verified payments only.</p></div>
+        <div><h1 class="view__title">Dashboard</h1><p class="view__sub">${hasDemo ? 'Includes sample data.' : 'Live from your database.'} Revenue counts verified payments only.</p></div>
         <div class="view__actions">
           <label class="sr-only" for="rangeSel">Date range</label>
           <select class="field field--select" id="rangeSel">${[7, 30, 90].map((d) => `<option value="${d}" ${d === days ? 'selected' : ''}>Last ${d} days</option>`).join('')}</select>
@@ -127,8 +129,8 @@
           ${activity.length ? `<ul class="alerts">${activity.map((a) => `<li><span>${esc(a.text)}<small>${O.fmtTime(a.at)}</small></span></li>`).join('')}</ul>` : '<p class="empty-note">No activity yet.</p>'}</section>
       </div>`;
     $('rangeSel').addEventListener('change', (e) => { state.range = +e.target.value; dashboard(); });
-    if ($('loadDemo')) $('loadDemo').addEventListener('click', () => { loadDemo(); dashboard(); badge(); });
-    if ($('clearDemo')) $('clearDemo').addEventListener('click', () => { O.write(orders().filter((o) => !o.demo)); dashboard(); badge(); });
+    if ($('loadDemo')) $('loadDemo').addEventListener('click', async (e) => { e.currentTarget.disabled = true; const r = await window.DB.loadDemo(buildDemo()); if (!r.ok) alert(r.error); await window.DB.refreshAll(); dashboard(); badge(); });
+    if ($('clearDemo')) $('clearDemo').addEventListener('click', async (e) => { e.currentTarget.disabled = true; const r = await window.DB.clearDemo(); if (!r.ok) alert(r.error); await window.DB.refreshAll(); dashboard(); badge(); });
   }
 
   function chart(b) {
@@ -215,43 +217,25 @@
     $('modal').dataset.ref = o.ref;
   }
 
-  function mutate(ref, fn) {
-    const list = orders(), o = list.find((x) => x.ref === ref); if (!o) return 'Order not found.';
-    const err = fn(o); if (err) return err;
-    return O.write(list) ? '' : 'Could not save. Check browser storage.';
-  }
-  function pushHist(o, status, note) {
-    if (!o.history || !o.history.length) o.history = [{ status: 'Pending', at: o.createdAt, note: 'Order placed' }];
-    o.history.push({ status, at: nowIso(), note, by: adminEmail }); o.orderStatus = status;
-  }
-  function logStock(sku, product, change, from, to, reason) {
-    jset('aurelle_inventory_log', [{ sku, product, change, from, to, reason, by: adminEmail, at: nowIso() }, ...invLog()].slice(0, 200));
+  /* Changes are made by the database (it re-checks the rules); we then reload and redraw. */
+  async function apply(promise) {
+    const r = await promise; if (!r.ok) return r.error;
+    await window.DB.refreshAll(); return '';
   }
 
   const form = (html) => { $('actionForm').innerHTML = html; const first = $('actionForm').querySelector('input,textarea'); if (first) first.focus(); };
-  function modalAction(btn) {
-    const ref = $('modal').dataset.ref, act = btn.dataset.act;
+  async function modalAction(btn) {
+    const ref = $('modal').dataset.ref, act = btn.dataset.act, DB = window.DB;
     if (act === 'status') {
       const to = btn.dataset.to;
-      const err = mutate(ref, (o) => {
-        if (to === 'Confirmed' && o.paymentStatus !== 'Paid' && o.paymentStatus !== 'Partially refunded') return 'Verify the payment before confirming this order.';
-        pushHist(o, to, to === 'Confirmed' ? 'Payment verified, order confirmed' : 'Status updated');
-      });
+      const err = await apply(DB.setStatus(ref, to));
       if (err) return mmsg(err, 'error');
       openOrder(ref); refreshList(); mmsg(`Order marked ${to}.`, 'ok');
     }
     if (act === 'showCancel') form(`<div class="fgroup"><label for="cReason">Reason for cancelling</label><input class="field" id="cReason" maxlength="120"></div><button class="btn btn--dark" data-act="doCancel">Confirm cancellation</button>`);
     if (act === 'doCancel') {
       const reason = $('cReason').value.trim(); if (reason.length < 5) return mmsg('Enter a reason of at least 5 characters.', 'error');
-      const err = mutate(ref, (o) => {
-        if (!['Pending', 'Confirmed', 'Processing'].includes(o.orderStatus)) return 'This order can no longer be cancelled.';
-        pushHist(o, 'Cancelled', reason);
-        if (o.stockDeducted && !o.stockRestored) {            // restore stock once only
-          o.items.forEach((i) => { const r = A.adjustStock(i.slug, i.sku, i.quantity); if (r) logStock(i.sku, i.name, i.quantity, r.from, r.to, `Order ${o.ref} cancelled`); });
-          o.stockRestored = true;
-        }
-        if (o.paymentStatus === 'Unpaid') o.paymentStatus = 'Unpaid';
-      });
+      const err = await apply(DB.setStatus(ref, 'Cancelled', reason));
       if (err) return mmsg(err, 'error');
       const paid = (orders().find((x) => x.ref === ref) || {}).paymentStatus === 'Paid';
       openOrder(ref); refreshList(); mmsg(paid ? 'Order cancelled and stock restored. Record a refund for the paid amount.' : 'Order cancelled and stock restored.', 'ok');
@@ -264,11 +248,7 @@
       const r = $('vRef').value.trim(), why = $('vReason').value.trim();
       if (r.length < 6) return mmsg('Enter the payment reference (at least 6 characters).', 'error');
       if (why.length < 10) return mmsg('Enter a reason of at least 10 characters.', 'error');
-      const err = mutate(ref, (o) => {
-        if (o.paymentStatus !== 'Unpaid') return 'This payment is already recorded.';
-        o.paymentStatus = 'Paid'; o.paidAt = nowIso();
-        (o.paymentLog = o.paymentLog || []).push({ action: 'Verified manually', reference: r, reason: why, by: adminEmail, at: nowIso() });
-      });
+      const err = await apply(DB.verifyPayment(ref, r, why));
       if (err) return mmsg(err, 'error');
       openOrder(ref); refreshList(); mmsg('Payment recorded as verified and added to the audit log.', 'ok');
     }
@@ -282,13 +262,7 @@
       const amt = Math.round(parseFloat($('rAmt').value) * 100), why = $('rReason').value.trim();
       if (!(amt > 0)) return mmsg('Enter a refund amount above zero.', 'error');
       if (why.length < 5) return mmsg('Enter a reason of at least 5 characters.', 'error');
-      const err = mutate(ref, (o) => {
-        const left = o.total - (o.refunded || 0);
-        if (amt > left) return `The most you can refund is ${naira(left)}.`;
-        o.refunded = (o.refunded || 0) + amt;
-        o.paymentStatus = o.refunded >= o.total ? 'Refunded' : 'Partially refunded';
-        (o.paymentLog = o.paymentLog || []).push({ action: 'Refund recorded', amount: amt, reason: why, by: adminEmail, at: nowIso() });
-      });
+      const err = await apply(DB.refund(ref, amt, why));
       if (err) return mmsg(err, 'error');
       openOrder(ref); refreshList(); mmsg('Refund recorded. Revenue figures now exclude it.', 'ok');
     }
@@ -306,12 +280,15 @@
         <td>${A.totalStock(p)}</td><td><button class="text-link" data-edit="${p.slug}" type="button">Edit</button> <button class="text-link" data-toggle="${p.slug}" type="button">${p.published ? 'Unpublish' : 'Publish'}</button></td></tr>`).join('')}
       </tbody></table></div>`;
   }
-  function saveOverride(slug, patch) {
-    const ov = jget('aurelle_overrides', {}); ov[slug] = { ...(ov[slug] || {}), ...patch };
-    if (!jset('aurelle_overrides', ov)) return false;
-    Object.assign(ALL().find((p) => p.slug === slug), patch);
-    window.AURELLE_PRODUCTS = ALL().filter((p) => p.published);
-    return true;
+  async function saveOverride(slug, patch) {
+    const row = {};
+    if ('price' in patch) row.price = patch.price;
+    if ('compare' in patch) row.compare_price = patch.compare;
+    if ('published' in patch) row.published = patch.published;
+    const r = await window.DB.updateProduct(slug, row);
+    if (!r.ok) return r.error;
+    await window.DB.refreshAll();
+    return '';
   }
   function editProduct(slug) {
     const p = ALL().find((x) => x.slug === slug);
@@ -388,7 +365,7 @@
   }
 
   /* ===== Sample data ===== */
-  function loadDemo() {
+  function buildDemo() {
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const people = [['Chiamaka Okoro', 'Enugu'], ['Emeka Nwosu', 'Anambra'], ['Ifeoma Eze', 'Lagos'], ['Tobenna Udeh', 'FCT Abuja'], ['Adaeze Obi', 'Enugu'], ['Kelechi Ibe', 'Imo'], ['Sade Bello', 'Lagos'], ['Uche Agu', 'Enugu']];
     const plan = [['Delivered', 'Paid'], ['Delivered', 'Paid'], ['Delivered', 'Paid'], ['Shipped', 'Paid'], ['Shipped', 'Paid'], ['Processing', 'Paid'], ['Processing', 'Paid'], ['Confirmed', 'Paid'], ['Confirmed', 'Paid'], ['Pending', 'Unpaid'], ['Pending', 'Unpaid'], ['Cancelled', 'Unpaid'], ['Delivered', 'Paid'], ['Confirmed', 'Paid']];
@@ -414,7 +391,7 @@
         orderStatus: status, paymentStatus: pay, createdAt: at(0), paidAt: pay === 'Paid' ? at(1) : undefined, history: hist,
         paymentLog: pay === 'Paid' ? [{ action: 'Verified (sample data)', reference: 'DEMO-REF', reason: 'Generated sample order', by: 'demo', at: at(1) }] : [], userEmail: null });
     });
-    O.write([...out, ...orders()]);
+    return out;
   }
 
   /* ===== Layout: sidebar, search, events ===== */
@@ -428,14 +405,14 @@
   const setCollapsed = (on) => { shell.classList.toggle('is-collapsed', on); $('collapseBtn').setAttribute('aria-pressed', String(on)); try { localStorage.setItem('aurelle_admin_collapsed', on ? '1' : ''); } catch (e) {} };
   $('collapseBtn').addEventListener('click', () => setCollapsed(!shell.classList.contains('is-collapsed')));
   try { if (localStorage.getItem('aurelle_admin_collapsed')) setCollapsed(true); } catch (e) {}
-  $('logoutBtn').addEventListener('click', () => { sessionStorage.removeItem(SESSION); location.href = 'login.html'; });
+  $('logoutBtn').addEventListener('click', async () => { await window.AUTH.logout(); location.href = 'login.html'; });
   $('searchForm').addEventListener('submit', (e) => { e.preventDefault(); const q = $('globalSearch').value.trim(); state.o.q = q; location.hash = '#/orders?q=' + encodeURIComponent(q); if (location.hash.startsWith('#/orders')) ordersView(); });
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('globalSearch').focus(); }
     if (e.key === 'Escape') { if (!$('modal').hidden) closeModal(); else setSide(false); }
   });
 
-  document.addEventListener('click', (e) => {
+  document.addEventListener('click', async (e) => {
     const t = e.target;
     if (t.closest('[data-close]') || t === $('modal')) return closeModal();
     const ob = t.closest('[data-order]'); if (ob) return openOrder(ob.dataset.order);
@@ -444,7 +421,8 @@
         const reg = Math.round(parseFloat($('eReg').value) * 100), disRaw = $('eDis').value.trim(), dis = disRaw ? Math.round(parseFloat(disRaw) * 100) : null;
         if (!(reg > 0)) return mmsg('Enter a regular price above zero.', 'error');
         if (dis !== null && !(dis > 0 && dis < reg)) return mmsg('The discount price must be above zero and below the regular price.', 'error');
-        if (!saveOverride(act.dataset.slug, { price: dis !== null ? dis : reg, compare: dis !== null ? reg : null, published: $('ePub').checked })) return mmsg('Could not save.', 'error');
+        const perr = await saveOverride(act.dataset.slug, { price: dis !== null ? dis : reg, compare: dis !== null ? reg : null, published: $('ePub').checked });
+        if (perr) return mmsg(perr, 'error');
         closeModal(); return productsView();
       }
       if (act.dataset.act === 'saveStock') {
@@ -454,14 +432,14 @@
         const p = ALL().find((x) => x.slug === act.dataset.slug), v = A.variants(p).find((x) => x.sku === act.dataset.sku);
         const delta = kind === 'add' ? qty : kind === 'deduct' ? -qty : qty - v.stock;
         if (kind === 'deduct' && qty > v.stock) return mmsg(`You can't deduct more than the ${v.stock} in stock.`, 'error');
-        const r = A.adjustStock(p.slug, v.sku, delta); if (!r) return mmsg('Could not save.', 'error');
-        logStock(v.sku, p.name, r.to - r.from, r.from, r.to, why);
+        const r = await window.DB.adjustStock(v.sku, delta, why); if (!r.ok) return mmsg(r.error, 'error');
+        await window.DB.refreshAll();
         closeModal(); return inventoryView();
       }
       return modalAction(act);
     }
     const ed = t.closest('[data-edit]'); if (ed) return editProduct(ed.dataset.edit);
-    const tg = t.closest('[data-toggle]'); if (tg) { const p = ALL().find((x) => x.slug === tg.dataset.toggle); saveOverride(p.slug, { published: !p.published }); return productsView(); }
+    const tg = t.closest('[data-toggle]'); if (tg) { const p = ALL().find((x) => x.slug === tg.dataset.toggle); const perr = await saveOverride(p.slug, { published: !p.published }); if (perr) alert(perr); return productsView(); }
     const ad = t.closest('[data-adjust]'); if (ad) return adjustModal(ad.dataset.adjust, ad.dataset.slug);
   });
 

@@ -98,7 +98,7 @@
           <blockquote>Fits as expected and arrived quickly. I would order again.</blockquote>
           <figcaption><strong>Emeka U.</strong><span>Verified buyer</span></figcaption></figure>
       </div>
-      <p class="note">Sample reviews written for this portfolio demo. Customer reviews arrive with the account system.</p>
+      <p class="note">The first two reviews are samples written for this portfolio demo. Reviews from verified buyers appear above them.</p>
     </section>
 
     ${related.length ? `<section class="pdp__section" aria-labelledby="relTitle">
@@ -107,8 +107,10 @@
   `);
   $('pdpLoading')?.remove();
 
-  const rv = A.readReviews(p.slug);
-  if (rv.length) root.querySelector('.pdp__section .reviews').insertAdjacentHTML('afterbegin', rv.map((r) => `<figure class="review"><div class="stars" role="img" aria-label="${r.rating} out of 5 stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</div><blockquote>${A.esc(r.text)}</blockquote><figcaption><strong>${A.esc(r.name)}</strong><span>Verified buyer</span></figcaption></figure>`).join(''));
+  window.DB.loadReviews(p.slug).then((rv) => {
+    if (!rv.length) return;
+    root.querySelector('.pdp__section .reviews').insertAdjacentHTML('afterbegin', rv.map((r) => `<figure class="review"><div class="stars" role="img" aria-label="${r.rating} out of 5 stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</div><blockquote>${A.esc(r.text)}</blockquote><figcaption><strong>${A.esc(r.name)}</strong><span>Verified buyer</span></figcaption></figure>`).join(''));
+  });
 
   /* ----- Selection logic ----- */
   const qty = $('qty'), addBtn = $('addBtn'), msg = $('addMsg');

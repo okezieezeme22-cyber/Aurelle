@@ -3,7 +3,8 @@
   const year = $('year'); if (year) year.textContent = new Date().getFullYear();
   const ref = new URLSearchParams(location.search).get('ref');
   let order = null;
-  try { order = JSON.parse(localStorage.getItem('aurelle_orders') || '[]').find((o) => o.ref === ref); } catch (e) {}
+  order = (window.AURELLE_ORDERS || []).find((o) => o.ref === ref) || null;
+  if (!order) { try { const last = JSON.parse(localStorage.getItem('aurelle_last_order') || 'null'); if (last && last.ref === ref) order = last; } catch (e) {} }
   const root = $('successRoot');
   if (!order) {
     root.innerHTML = `<div class="empty"><h1 class="page-title">Order not found</h1><p>We could not find that order in this browser.</p><a class="btn btn--dark" href="shop.html">Back to shop</a></div>`;

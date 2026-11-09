@@ -23,13 +23,12 @@
         <p class="form-msg" id="formMsg" role="alert"></p>
       </form>
       <div class="demo-note">
-        <strong>Portfolio demo credentials</strong>
-        <p>Email: <code>admin@aurelle.example</code><br>Password: <code>AurelleAdmin#2026</code></p>
-        <p>This sign-in only runs in your browser, so it is a demonstration and not real security. A live store needs server-side roles (Supabase) so customers can never reach admin features.</p>
+        <strong>Administrators only</strong>
+        <p>Admin access is granted by the store owner. Customer accounts cannot open the dashboard, and the database rejects admin actions from anyone else.</p>
       </div>
       <p class="auth__alt"><a class="text-link" href="../index.html">Back to the store</a></p>
     </div>
   </main>
-  <script src="../js/admin.js"></script>
+  <script src="../js/boot.js" data-early="" data-scripts="auth,admin"></script>
 </body>
 </html>
