@@ -13,11 +13,12 @@ live in Supabase instead of the visitor's browser.
 3. New query again. Paste `supabase/seed.sql` (the 15 demo products and their 102 size/colour variants) and **Run**.
 4. Apply `supabase/migrations/20261110000002_add_category_products.sql` to add the first products and their variants across all five categories.
 5. Apply `supabase/migrations/20261110000003_add_mens_image_products.sql` to add the products made from the supplied men's images.
+6. Apply `supabase/migrations/20261110000004_add_womens_image_products.sql` to add products made from the latest supplied women's images.
    The seed and catalogue migrations are safe to run more than once.
 
-The existing Aurelle project already has the schema and original seed data. To update it, run each
-new migration in order in **SQL Editor**. The browser catalogue is a fallback; the storefront and
-admin use the database catalogue whenever Supabase is connected.
+The existing Aurelle project already has the schema and original seed data. To update it, run any
+new catalogue migrations you have not applied in **SQL Editor**, in numeric order. The browser
+catalogue is a fallback; the storefront and admin use the database catalogue whenever Supabase is connected.
 
 ## 2. Connect the site
 
