@@ -3,11 +3,12 @@
    <script src="js/boot.js" data-early="main" data-scripts="overrides,shared,auth,home" data-orders></script> */
 (() => {
   const me = document.currentScript;
+  const V = '20261110f';
   const base = me.src.replace(/boot\.js(\?.*)?$/, '');
   const names = (k) => (me.dataset[k] || '').split(',').map((s) => s.trim()).filter(Boolean);
   const load = (src) => new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = src; s.async = false; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
+    s.src = src + (src.includes('?') ? '' : '?v=' + V); s.async = false; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
     document.head.appendChild(s);
   });
   const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';

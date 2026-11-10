@@ -35,6 +35,10 @@
   scrim.addEventListener('click', () => setMenu(false));
   nav.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => setMenu(false)));
 
+  /* ----- Shop menu: opens on hover or keyboard focus; Escape closes it ----- */
+  const shopMenu = document.querySelector('.nav__shop');
+  if (shopMenu) ['mouseleave', 'focusout'].forEach((ev) => shopMenu.addEventListener(ev, () => shopMenu.classList.remove('is-dismissed')));
+
   /* ----- Search panel ----- */
   const panel = $('searchPanel'), searchBtn = $('searchToggle');
   function setSearch(open) {
@@ -47,6 +51,8 @@
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (nav.classList.contains('is-open')) setMenu(false);
+    const shop = document.querySelector('.nav__shop');
+    if (shop) shop.classList.add('is-dismissed');
     if (!panel.hidden) { setSearch(false); searchBtn.focus(); }
   });
 

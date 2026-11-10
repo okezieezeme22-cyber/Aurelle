@@ -11,7 +11,12 @@ live in Supabase instead of the visitor's browser.
 1. Open your Supabase project, then **SQL Editor > New query**.
 2. Paste the whole of `supabase/migrations/20261106000001_aurelle_schema.sql` and press **Run**.
 3. New query again. Paste `supabase/seed.sql` (the 15 demo products and their 102 size/colour variants) and **Run**.
-   It is safe to run twice.
+4. Apply `supabase/migrations/20261110000002_add_category_products.sql` to add the new products and their variants across all five categories.
+   The seed and catalogue migration are safe to run more than once.
+
+The existing Aurelle project already has the schema and original seed data. To update it, run only
+`supabase/migrations/20261110000002_add_category_products.sql` in **SQL Editor**. The browser
+catalogue is a fallback; the storefront uses the database catalogue whenever Supabase is connected.
 
 ## 2. Connect the site
 
