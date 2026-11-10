@@ -3,7 +3,7 @@
    <script src="js/boot.js" data-early="main" data-scripts="overrides,shared,auth,home" data-orders></script> */
 (() => {
   const me = document.currentScript;
-  const V = '20261110h';
+  const V = '20261110j';
   const base = me.src.replace(/boot\.js(\?.*)?$/, '');
   const names = (k) => (me.dataset[k] || '').split(',').map((s) => s.trim()).filter(Boolean);
   const load = (src) => new Promise((resolve, reject) => {

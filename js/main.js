@@ -29,6 +29,15 @@
     toggle.setAttribute('aria-expanded', String(open));
     document.body.style.overflow = open ? 'hidden' : '';
     if (open) $('menuClose').focus(); else toggle.focus({ preventScroll: true });
+    if (!open) {
+      const shop = document.querySelector('.nav__shop');
+      const shopToggle = document.querySelector('.nav__shop-toggle');
+      if (shop && shopToggle) {
+        shop.classList.remove('is-expanded');
+        shopToggle.setAttribute('aria-expanded', 'false');
+        shopToggle.setAttribute('aria-label', 'Show shop categories');
+      }
+    }
   }
   toggle.addEventListener('click', () => setMenu(true));
   $('menuClose').addEventListener('click', () => setMenu(false));
@@ -37,6 +46,14 @@
 
   /* ----- Shop menu: opens on hover or keyboard focus; Escape closes it ----- */
   const shopMenu = document.querySelector('.nav__shop');
+  const shopMenuToggle = document.querySelector('.nav__shop-toggle');
+  if (shopMenu && shopMenuToggle) {
+    shopMenuToggle.addEventListener('click', () => {
+      const expanded = shopMenu.classList.toggle('is-expanded');
+      shopMenuToggle.setAttribute('aria-expanded', String(expanded));
+      shopMenuToggle.setAttribute('aria-label', expanded ? 'Hide shop categories' : 'Show shop categories');
+    });
+  }
   if (shopMenu) ['mouseleave', 'focusout'].forEach((ev) => shopMenu.addEventListener(ev, () => shopMenu.classList.remove('is-dismissed')));
 
   /* ----- Search panel ----- */
@@ -52,7 +69,13 @@
     if (e.key !== 'Escape') return;
     if (nav.classList.contains('is-open')) setMenu(false);
     const shop = document.querySelector('.nav__shop');
+    const shopToggle = document.querySelector('.nav__shop-toggle');
     if (shop) shop.classList.add('is-dismissed');
+    if (shop && shop.classList.contains('is-expanded')) {
+      shop.classList.remove('is-expanded');
+      shopToggle.setAttribute('aria-expanded', 'false');
+      shopToggle.setAttribute('aria-label', 'Show shop categories');
+    }
     if (!panel.hidden) { setSearch(false); searchBtn.focus(); }
   });
 
