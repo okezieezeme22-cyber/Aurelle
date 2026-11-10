@@ -1,6 +1,5 @@
 (() => {
   const A = window.AURELLE, $ = (id) => document.getElementById(id);
-  const PAGE = 8;
   const cats = window.AURELLE_CATEGORIES;
   const PRICES = [
     { id: 'any', label: 'Any price', min: 0, max: Infinity },
@@ -20,8 +19,7 @@
     sizes: params.getAll('size'),
     colours: params.getAll('colour'),
     sale: params.get('sale') === '1',
-    sort: params.get('sort') || 'newest',
-    shown: PAGE
+    sort: params.get('sort') || 'newest'
   };
 
   /* ----- Build the filter controls ----- */
@@ -69,11 +67,10 @@
 
   function render() {
     const list = A.products.filter(matches).sort(sorters[state.sort] || sorters.newest);
-    const visible = list.slice(0, state.shown);
-    $('grid').innerHTML = visible.map(A.card).join('');
+    $('grid').innerHTML = list.map(A.card).join('');
+    $('grid').setAttribute('aria-busy', 'false');
     $('grid').hidden = !list.length;
     $('empty').hidden = !!list.length;
-    $('loadMore').hidden = list.length <= state.shown;
     $('resultCount').textContent = `${list.length} ${list.length === 1 ? 'product' : 'products'}`;
     const cat = cats.find((c) => c.key === state.category);
     $('shopTitle').textContent = state.q ? `Results for “${state.q}”` : cat ? cat.label : state.sale ? 'Sale' : 'Shop';
@@ -88,7 +85,7 @@
     if (state.sort !== 'newest') next.set('sort', state.sort);
     history.replaceState(null, '', next.toString() ? `?${next}` : location.pathname);
   }
-  const update = () => { state.shown = PAGE; render(); };
+  const update = () => { render(); };
 
   /* ----- Events ----- */
   let t;
@@ -103,7 +100,6 @@
     update();
   });
   $('sort').addEventListener('change', (e) => { state.sort = e.target.value; update(); });
-  $('loadMore').addEventListener('click', () => { state.shown += PAGE; render(); });
   const clear = () => { Object.assign(state, { q: '', category: '', price: 'any', sizes: [], colours: [], sale: false }); syncControls(); update(); };
   $('clearFilters').addEventListener('click', clear);
   $('emptyClear').addEventListener('click', clear);
